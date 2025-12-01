@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: money_bot_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-money_bot}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - money_bot_network
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: money_bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-money_bot}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DAILY_INCOME_TIME=${DAILY_INCOME_TIME:-09:00}
+      - DAILY_EXPENSE_TIME=${DAILY_EXPENSE_TIME:-20:00}
+      - TIMEZONE=${TIMEZONE:-Europe/Moscow}
+    networks:
+      - money_bot_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  money_bot_network:
+    driver: bridge
