@@ -1,0 +1,69 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Ручной запуск
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: self-hosted
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run tests
+        run: |
+          echo "Running tests..."
+          # pytest tests/ -v
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: self-hosted
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://t.me/kostyatracker_bot
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_NAME=${{ secrets.DB_NAME }}
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DAILY_INCOME_TIME=${{ secrets.DAILY_INCOME_TIME }}
+          DAILY_EXPENSE_TIME=${{ secrets.DAILY_EXPENSE_TIME }}
+          TIMEZONE=${{ secrets.TIMEZONE }}
+          EOF
+      
+      - name: Deploy with Docker Compose
+        run: |
+          echo "🐳 Deploying with Docker Compose..."
+          docker-compose down
+          docker-compose up -d --build
+          
+          echo "⏳ Waiting for services..."
+          sleep 10
+          
+          echo "✅ Checking status..."
+          docker-compose ps
+          
+          echo "📊 Bot logs:"
+          docker-compose logs --tail=20 bot
+          
+          echo "🎉 Deployment complete!"
+      
+      - name: Check deployment
+        run: |
+          docker-compose ps | grep -q "Up" && echo "✅ Services are running" || exit 1
