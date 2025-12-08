@@ -37,7 +37,8 @@ jobs:
       - name: Pull latest code
         run: |
           echo "📥 Pulling latest code..."
-          git pull origin main
+          git fetch origin main
+          git reset --hard origin/main
       
       - name: Create .env file
         run: |
