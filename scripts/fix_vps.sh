@@ -65,3 +65,7 @@ echo "   docker-compose --version"
 echo "   cd /opt/money_bot && ls -la"
 echo ""
 
+
+
+
+

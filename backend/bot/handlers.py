@@ -277,3 +277,7 @@ async def cmd_history(message: Message, session: AsyncSession):
     
     await message.answer(history_text, parse_mode="HTML")
 
+
+
+
+

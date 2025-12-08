@@ -52,3 +52,7 @@ class Transaction(Base):
     def __repr__(self):
         return f"<Transaction(id={self.id}, type={self.transaction_type}, amount={self.amount})>"
 
+
+
+
+

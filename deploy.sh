@@ -58,3 +58,7 @@ echo "  docker-compose ps              # Статус контейнеров"
 echo "  docker-compose restart bot     # Перезапуск бота"
 echo "  docker-compose down            # Остановка всего"
 
+
+
+
+

@@ -79,3 +79,7 @@ echo "3. Склонируй репозиторий в /opt/money_bot"
 echo "4. Установи GitLab Runner"
 echo ""
 
+
+
+
+

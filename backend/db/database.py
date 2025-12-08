@@ -43,3 +43,7 @@ async def close_db():
     """Закрытие подключения к БД"""
     await engine.dispose()
 
+
+
+
+

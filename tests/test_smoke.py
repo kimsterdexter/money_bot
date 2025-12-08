@@ -236,3 +236,7 @@ async def test_negative_balance_allowed(test_db_session):
     # Баланс должен быть отрицательным
     assert float(user.current_balance) == -400.0
 
+
+
+
+

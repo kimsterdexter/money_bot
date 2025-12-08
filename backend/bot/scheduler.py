@@ -112,3 +112,7 @@ class ReminderScheduler:
                 except Exception as e:
                     logger.error(f"Ошибка отправки напоминания пользователю {user.telegram_id}: {e}")
 
+
+
+
+

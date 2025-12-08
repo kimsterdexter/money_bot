@@ -45,3 +45,7 @@ echo "4. Проверь статус:"
 echo "   sudo ./svc.sh status"
 echo ""
 
+
+
+
+

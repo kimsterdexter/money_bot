@@ -30,3 +30,7 @@ DAILY_EXPENSE_TIME = os.getenv('DAILY_EXPENSE_TIME', '20:00')  # Вечером 
 # Timezone
 TIMEZONE = os.getenv('TIMEZONE', 'Europe/Moscow')
 
+
+
+
+

@@ -43,3 +43,7 @@ echo "4. Перезапусти runner:"
 echo "   sudo gitlab-runner restart"
 echo ""
 
+
+
+
+
