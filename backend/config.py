@@ -3,6 +3,7 @@
 """
 import os
 from pathlib import Path
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 
 # Загружаем .env из корня проекта
@@ -21,7 +22,8 @@ DB_NAME = os.getenv('DB_NAME', 'money_bot')
 DB_USER = os.getenv('DB_USER', 'postgres')
 DB_PASSWORD = os.getenv('DB_PASSWORD', 'postgres')
 
-DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+# URL-кодируем пароль для корректной работы с специальными символами
+DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{quote_plus(DB_PASSWORD)}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 # Время ежедневных напоминаний (формат HH:MM)
 DAILY_INCOME_TIME = os.getenv('DAILY_INCOME_TIME', '09:00')  # Утром спрашиваем про пополнение
