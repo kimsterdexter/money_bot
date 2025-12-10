@@ -34,9 +34,18 @@ async def get_session() -> AsyncSession:
 
 
 async def init_db():
-    """Инициализация БД - создание всех таблиц"""
+    """Инициализация БД - создание всех таблиц и миграция данных"""
+    # Импортируем модели чтобы они зарегистрировались
+    from backend.db.models import User, Transaction, Family, TransactionType
+    
+    # Создаем таблицы
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    
+    # Выполняем миграцию данных если нужно
+    from backend.db.migrate import migrate_to_family_wallet
+    async with async_session_maker() as session:
+        await migrate_to_family_wallet(session)
 
 
 async def close_db():

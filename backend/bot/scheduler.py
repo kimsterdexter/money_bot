@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import DAILY_INCOME_TIME, DAILY_EXPENSE_TIME, TIMEZONE
-from backend.db.models import User
+from backend.db.models import User, Family
 from backend.db.database import async_session_maker
 
 logger = logging.getLogger(__name__)
@@ -94,11 +94,22 @@ class ReminderScheduler:
             
             for user in users:
                 try:
+                    # Получаем семью пользователя для показа баланса
+                    family_result = await session.execute(
+                        select(Family).where(Family.id == user.family_id)
+                    )
+                    family = family_result.scalar_one_or_none()
+                    
+                    if family:
+                        balance_text = f"💰 Семейный баланс: <b>{float(family.current_balance):.2f} ₽</b>"
+                    else:
+                        balance_text = ""
+                    
                     message_text = (
                         "🌙 Добрый вечер!\n\n"
-                        "Сколько потратил сегодня?\n\n"
+                        "Сколько потратил(а) сегодня?\n\n"
                         "Запиши расходы с помощью команды /expense\n\n"
-                        f"💰 Текущий баланс: <b>{float(user.current_balance):.2f} ₽</b>"
+                        f"{balance_text}"
                     )
                     
                     await self.bot.send_message(
