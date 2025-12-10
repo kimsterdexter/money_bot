@@ -23,6 +23,38 @@ async def migrate_to_family_wallet(session: AsyncSession):
     logger.info("Начало миграции БД...")
     
     try:
+        # Шаг 0: Добавляем необходимые колонки если их нет
+        logger.info("Проверка и добавление необходимых колонок...")
+        
+        # Добавляем family_id в users если его нет
+        await session.execute(
+            text("""
+                ALTER TABLE users 
+                ADD COLUMN IF NOT EXISTS family_id BIGINT
+            """)
+        )
+        logger.info("Колонка users.family_id проверена/добавлена")
+        
+        # Добавляем family_id в transactions если его нет
+        await session.execute(
+            text("""
+                ALTER TABLE transactions 
+                ADD COLUMN IF NOT EXISTS family_id BIGINT
+            """)
+        )
+        logger.info("Колонка transactions.family_id проверена/добавлена")
+        
+        # Добавляем user_name в transactions если его нет
+        await session.execute(
+            text("""
+                ALTER TABLE transactions 
+                ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)
+            """)
+        )
+        logger.info("Колонка transactions.user_name проверена/добавлена")
+        
+        await session.commit()
+        
         # Проверяем существует ли таблица families
         result = await session.execute(
             text("""
@@ -35,7 +67,7 @@ async def migrate_to_family_wallet(session: AsyncSession):
         families_exists = result.scalar()
         
         if families_exists:
-            logger.info("Таблица families уже существует, проверяем нужна ли миграция данных...")
+            logger.info("Таблица families существует, проверяем нужна ли миграция данных...")
             
             # Проверяем есть ли пользователи без family_id
             result = await session.execute(
@@ -103,29 +135,8 @@ async def migrate_to_family_wallet(session: AsyncSession):
             
             logger.info(f"Создана семья {family_id} для пользователя {telegram_id}")
         
-        # Шаг 2: Обновляем транзакции - добавляем family_id и user_name
+        # Шаг 2: Обновляем транзакции - заполняем family_id и user_name из users
         logger.info("Обновление транзакций...")
-        
-        # Проверяем есть ли колонка user_name
-        result = await session.execute(
-            text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.columns 
-                    WHERE table_name = 'transactions' 
-                    AND column_name = 'user_name'
-                )
-            """)
-        )
-        user_name_exists = result.scalar()
-        
-        if not user_name_exists:
-            # Добавляем колонку user_name
-            await session.execute(
-                text("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)")
-            )
-            logger.info("Добавлена колонка user_name в transactions")
-        
-        # Обновляем транзакции: добавляем family_id и user_name из users
         await session.execute(
             text("""
                 UPDATE transactions t
@@ -146,7 +157,54 @@ async def migrate_to_family_wallet(session: AsyncSession):
         
         logger.info(f"Обновлено транзакций: {updated_count}")
         
-        # Шаг 3: Удаляем колонку current_balance из users (опционально)
+        # Шаг 3: Добавляем внешние ключи если их нет
+        logger.info("Добавление внешних ключей...")
+        
+        # Проверяем и добавляем FK для users.family_id
+        result = await session.execute(
+            text("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints 
+                    WHERE constraint_name = 'users_family_id_fkey'
+                    AND table_name = 'users'
+                )
+            """)
+        )
+        fk_exists = result.scalar()
+        
+        if not fk_exists:
+            await session.execute(
+                text("""
+                    ALTER TABLE users 
+                    ADD CONSTRAINT users_family_id_fkey 
+                    FOREIGN KEY (family_id) REFERENCES families(id)
+                """)
+            )
+            logger.info("Добавлен внешний ключ users.family_id -> families.id")
+        
+        # Проверяем и добавляем FK для transactions.family_id
+        result = await session.execute(
+            text("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.table_constraints 
+                    WHERE constraint_name = 'transactions_family_id_fkey'
+                    AND table_name = 'transactions'
+                )
+            """)
+        )
+        fk_exists = result.scalar()
+        
+        if not fk_exists:
+            await session.execute(
+                text("""
+                    ALTER TABLE transactions 
+                    ADD CONSTRAINT transactions_family_id_fkey 
+                    FOREIGN KEY (family_id) REFERENCES families(id)
+                """)
+            )
+            logger.info("Добавлен внешний ключ transactions.family_id -> families.id")
+        
+        # Шаг 4: Удаляем колонку current_balance из users (опционально)
         # Это можно не делать для обратной совместимости
         # Но можно раскомментировать если нужно:
         # await session.execute(
