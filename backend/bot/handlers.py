@@ -17,6 +17,25 @@ from backend.db.models import User, Transaction, TransactionType, Family
 router = Router()
 logger = logging.getLogger(__name__)
 
+# Глобальное хранилище кодов привязки
+# {code: {"family_id": int, "creator_id": int, "expires_at": float}}
+invite_codes = {}
+
+
+def cleanup_expired_codes():
+    """Очистка истекших кодов привязки"""
+    current_time = datetime.utcnow().timestamp()
+    expired_codes = [
+        code for code, data in invite_codes.items()
+        if data['expires_at'] < current_time
+    ]
+    for code in expired_codes:
+        del invite_codes[code]
+        logger.debug(f"Удален истекший код: {code}")
+    
+    if expired_codes:
+        logger.info(f"Очищено истекших кодов: {len(expired_codes)}")
+
 
 class FinanceStates(StatesGroup):
     """Состояния для записи транзакций"""
@@ -96,7 +115,8 @@ async def cmd_start(message: Message, session: AsyncSession):
         "/balance - Показать текущий баланс\n"
         "/history - История транзакций (последние 10)\n"
         "/family - Участники семьи\n"
-        "/link - Привязать члена семьи\n"
+        "/link - Создать код для привязки\n"
+        "/join - Присоединиться к семье по коду\n"
         "/help - Справка\n\n"
         f"💰 Семейный баланс: <b>{float(family.current_balance):.2f} ₽</b>"
     ).format(family_info=family_info)
@@ -119,8 +139,10 @@ async def cmd_help(message: Message):
         "Показывает последние 10 операций всей семьи с указанием кто добавил.\n\n"
         "👨‍👩‍👧‍👦 /family - Участники семьи\n"
         "Показывает список всех членов семьи.\n\n"
-        "🔗 /link - Привязать члена семьи\n"
+        "🔗 /link - Создать код для привязки\n"
         "Создаёт код для привязки супруга/супруги к общему кошельку.\n\n"
+        "🔗 /join - Присоединиться к семье\n"
+        "Ввести код от супруга/супруги для объединения кошельков.\n\n"
         "❌ /cancel - Отменить текущую операцию\n\n"
         "Я буду присылать тебе ежедневные напоминания:\n"
         "🌅 Утром - записать пополнения\n"
@@ -179,20 +201,26 @@ async def cmd_family(message: Message, session: AsyncSession):
 
 
 @router.message(Command("link"))
-async def cmd_link(message: Message, session: AsyncSession, state: FSMContext):
+async def cmd_link(message: Message, session: AsyncSession):
     """Команда /link - создать код для привязки члена семьи"""
     user, family = await get_or_create_user(session, message)
     
-    # Генерируем уникальный код привязки (6 символов)
-    link_code = secrets.token_urlsafe(6)[:6].upper()
+    # Очищаем истекшие коды перед созданием нового
+    cleanup_expired_codes()
     
-    # Сохраняем код в состояние (живет 10 минут)
-    await state.set_state(FinanceStates.waiting_for_link_code)
-    await state.update_data(
-        link_code=link_code,
-        family_id=family.id,
-        expires_at=datetime.utcnow().timestamp() + 600  # 10 минут
-    )
+    # Генерируем уникальный код привязки (6 символов)
+    while True:
+        link_code = secrets.token_urlsafe(6)[:6].upper()
+        # Проверяем что код уникальный
+        if link_code not in invite_codes:
+            break
+    
+    # Сохраняем код в глобальное хранилище (живет 10 минут)
+    invite_codes[link_code] = {
+        "family_id": family.id,
+        "creator_id": user.telegram_id,
+        "expires_at": datetime.utcnow().timestamp() + 600  # 10 минут
+    }
     
     link_text = (
         f"🔗 <b>Код для привязки к семейному кошельку:</b>\n\n"
@@ -205,7 +233,7 @@ async def cmd_link(message: Message, session: AsyncSession, state: FSMContext):
     )
     
     await message.answer(link_text, parse_mode="HTML")
-    logger.info(f"User {user.telegram_id} создал код привязки: {link_code}")
+    logger.info(f"User {user.telegram_id} создал код привязки: {link_code} для семьи {family.id}")
 
 
 @router.message(Command("join"))
@@ -228,30 +256,26 @@ async def process_link_code(message: Message, state: FSMContext, session: AsyncS
     # Получаем текущего пользователя
     current_user, current_family = await get_or_create_user(session, message)
     
-    # Ищем пользователя который создал этот код
-    # Проходим по всем активным состояниям (это упрощенная версия)
-    # В продакшене лучше хранить коды в БД
-    
-    # Проверяем данные из state того кто создал код
-    data = await state.get_data()
-    
-    if 'link_code' not in data:
+    # Проверяем код в глобальном хранилище
+    if code not in invite_codes:
         await message.answer(
             "❌ Код не найден.\n\n"
+            "Возможно:\n"
+            "• Код введен неверно\n"
+            "• Код уже был использован\n"
+            "• Код истек (10 минут)\n\n"
             "Попроси супруга/супругу отправить команду /link и получить новый код."
         )
         await state.clear()
         return
     
-    # Проверяем код
-    if data['link_code'] != code:
-        await message.answer(
-            "❌ Неверный код. Попробуй еще раз или используй /cancel для отмены."
-        )
-        return
+    # Получаем данные кода
+    code_data = invite_codes[code]
     
     # Проверяем срок действия
-    if datetime.utcnow().timestamp() > data.get('expires_at', 0):
+    if datetime.utcnow().timestamp() > code_data['expires_at']:
+        # Удаляем истекший код
+        del invite_codes[code]
         await message.answer(
             "⏰ Код истек (10 минут).\n\n"
             "Попроси супруга/супругу создать новый код через /link"
@@ -259,11 +283,18 @@ async def process_link_code(message: Message, state: FSMContext, session: AsyncS
         await state.clear()
         return
     
-    target_family_id = data['family_id']
+    target_family_id = code_data['family_id']
+    creator_id = code_data['creator_id']
     
     # Проверяем не пытается ли пользователь привязаться к самому себе
+    if current_user.telegram_id == creator_id:
+        await message.answer("❌ Это твой собственный код! Отправь его супругу/супруге.")
+        await state.clear()
+        return
+    
+    # Проверяем не пытается ли пользователь привязаться к своей же семье
     if current_family.id == target_family_id:
-        await message.answer("❌ Это код твоей собственной семьи!")
+        await message.answer("❌ Ты уже в этой семье!")
         await state.clear()
         return
     
@@ -276,7 +307,7 @@ async def process_link_code(message: Message, state: FSMContext, session: AsyncS
     # Переносим баланс текущей семьи в целевую
     target_family.current_balance = float(target_family.current_balance) + float(current_family.current_balance)
     
-    # Переносим все транзакции текущего пользователя
+    # Переносим все транзакции текущей семьи в целевую
     result = await session.execute(
         select(Transaction).where(Transaction.family_id == current_family.id)
     )
@@ -285,7 +316,7 @@ async def process_link_code(message: Message, state: FSMContext, session: AsyncS
     for tx in transactions:
         tx.family_id = target_family.id
     
-    # Удаляем старую семью (если там только один человек)
+    # Получаем членов старой семьи для проверки
     old_family_members = await get_family_members(session, current_family.id)
     
     # Привязываем пользователя к новой семье
@@ -299,7 +330,10 @@ async def process_link_code(message: Message, state: FSMContext, session: AsyncS
     await session.commit()
     await state.clear()
     
-    # Уведомляем обоих
+    # Удаляем использованный код
+    del invite_codes[code]
+    
+    # Получаем новый список членов семьи
     new_members = await get_family_members(session, target_family.id)
     
     await message.answer(
@@ -309,7 +343,7 @@ async def process_link_code(message: Message, state: FSMContext, session: AsyncS
         parse_mode="HTML"
     )
     
-    logger.info(f"User {current_user.telegram_id} присоединился к семье {target_family.id}")
+    logger.info(f"User {current_user.telegram_id} присоединился к семье {target_family.id}, код {code} удален")
 
 
 @router.message(Command("income"))
