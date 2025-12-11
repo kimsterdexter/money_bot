@@ -42,6 +42,8 @@ class User(Base):
     first_name: Mapped[str] = mapped_column(String(255), nullable=True)
     last_name: Mapped[str] = mapped_column(String(255), nullable=True)
     family_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('families.id'), nullable=True)
+    # Старое поле для обратной совместимости (больше не используется)
+    current_balance: Mapped[float] = mapped_column(Numeric(15, 2), nullable=True, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, 

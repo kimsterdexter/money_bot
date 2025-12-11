@@ -53,6 +53,15 @@ async def migrate_to_family_wallet(session: AsyncSession):
         )
         logger.info("Колонка transactions.user_name проверена/добавлена")
         
+        # Делаем current_balance nullable (больше не используется)
+        await session.execute(
+            text("""
+                ALTER TABLE users 
+                ALTER COLUMN current_balance DROP NOT NULL
+            """)
+        )
+        logger.info("Колонка users.current_balance сделана nullable")
+        
         await session.commit()
         
         # Проверяем существует ли таблица families
